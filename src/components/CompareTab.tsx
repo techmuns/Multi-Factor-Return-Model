@@ -39,7 +39,10 @@ export function CompareTab({ data, saved, onRemove, onClear }: Props) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
           <h2 style={{ fontSize: 18, marginBottom: 4 }}>Compare portfolios</h2>
-          <p style={{ fontSize: 13 }}>{saved.length} of 5 saved.</p>
+          <p style={{ fontSize: 13 }}>
+            {saved.length} of 5 saved. Tip: click the <strong>✕</strong> on any column to remove that portfolio, or “Clear
+            all” to reset.
+          </p>
         </div>
         <button
           type="button"
@@ -65,16 +68,17 @@ export function CompareTab({ data, saved, onRemove, onClear }: Props) {
               <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500, borderBottom: '1px solid var(--border)' }}>Metric</th>
               {saved.map((s) => (
                 <th key={s.id} style={{ padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
                     <span style={{ width: 8, height: 8, borderRadius: 4, background: s.color, display: 'inline-block' }} />
                     <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{s.label}</span>
                     <button
                       type="button"
+                      className="remove-btn"
                       onClick={() => onRemove(s.id)}
                       aria-label={`Remove ${s.label}`}
-                      style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, padding: '0 2px' }}
+                      title="Remove this portfolio"
                     >
-                      ×
+                      ✕
                     </button>
                   </div>
                 </th>

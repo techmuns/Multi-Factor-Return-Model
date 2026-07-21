@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FactorDataset } from '../lib/data'
 import { PRESETS, type FactorKey } from '../lib/factors'
 import { buildPortfolio, type PortfolioResult, type WeightMode } from '../lib/portfolio'
-import { MAX_SAVED } from '../lib/saved'
+import { MAX_SAVED, signatureOf, type SaveStatus } from '../lib/saved'
+import { CompareNotice } from './CompareNotice'
 import { FactorChips } from './FactorChips'
 import { GrowthChart } from './GrowthChart'
 import { StatTiles } from './StatTiles'
@@ -11,7 +12,9 @@ import { WeightBars } from './WeightBars'
 interface Props {
   data: FactorDataset
   savedCount: number
-  onSave: (label: string, result: PortfolioResult) => void
+  savedSignatures: string[]
+  onSave: (label: string, result: PortfolioResult) => SaveStatus
+  onGoToCompare: () => void
 }
 
 const MODES: { id: WeightMode; label: string; hint: string }[] = [
@@ -20,10 +23,11 @@ const MODES: { id: WeightMode; label: string; hint: string }[] = [
   { id: 'manual', label: 'Manual', hint: 'Set each factor’s weight yourself.' },
 ]
 
-export function PortfolioBuilderTab({ data, savedCount, onSave }: Props) {
+export function PortfolioBuilderTab({ data, savedCount, savedSignatures, onSave, onGoToCompare }: Props) {
   const [selected, setSelected] = useState<FactorKey[]>(['MKT_RF', 'SMB', 'HML'])
   const [mode, setMode] = useState<WeightMode>('optimized')
   const [manualWeights, setManualWeights] = useState<Record<string, number>>({})
+  const [notice, setNotice] = useState<SaveStatus | null>(null)
 
   useEffect(() => {
     setManualWeights((prev) => {
@@ -52,6 +56,18 @@ export function PortfolioBuilderTab({ data, savedCount, onSave }: Props) {
 
   const label = selected.map((k) => k.replace('_RF', '')).join(' + ')
   const atCap = savedCount >= MAX_SAVED
+  const currentSig = result ? signatureOf(result) : null
+  const alreadySaved = currentSig !== null && savedSignatures.includes(currentSig)
+
+  // Clear a stale confirmation once the portfolio itself changes.
+  useEffect(() => {
+    setNotice(null)
+  }, [currentSig])
+
+  function handleAdd() {
+    if (!result) return
+    setNotice(onSave(label, result))
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -142,24 +158,47 @@ export function PortfolioBuilderTab({ data, savedCount, onSave }: Props) {
             </div>
           </div>
 
-          <div>
-            <button
-              type="button"
-              disabled={atCap}
-              onClick={() => onSave(label, result)}
-              style={{
-                padding: '10px 18px',
-                borderRadius: 8,
-                border: 'none',
-                background: atCap ? 'var(--border-strong)' : 'var(--accent)',
-                color: '#fff',
-                cursor: atCap ? 'not-allowed' : 'pointer',
-                fontSize: 13.5,
-                fontWeight: 600,
-              }}
-            >
-              {atCap ? 'Compare list full (5/5)' : '+ Add to Compare'}
-            </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              {alreadySaved ? (
+                <button
+                  type="button"
+                  onClick={onGoToCompare}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: 8,
+                    border: '1px solid var(--good)',
+                    background: 'transparent',
+                    color: 'var(--good)',
+                    cursor: 'pointer',
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                  }}
+                >
+                  ✓ In Compare — view
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={atCap}
+                  onClick={handleAdd}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: atCap ? 'var(--border-strong)' : 'var(--accent)',
+                    color: '#fff',
+                    cursor: atCap ? 'not-allowed' : 'pointer',
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                  }}
+                >
+                  {atCap ? 'Compare list full (5/5)' : '+ Add to Compare'}
+                </button>
+              )}
+              <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>{savedCount}/{MAX_SAVED} in Compare</span>
+            </div>
+            {notice && <CompareNotice kind={notice} label={label} count={savedCount} onGoToCompare={onGoToCompare} />}
           </div>
         </>
       )}

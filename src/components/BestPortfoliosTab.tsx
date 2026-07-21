@@ -3,13 +3,16 @@ import { evaluateAllCombinations, TOTAL_COMBINATIONS, type RankedPortfolio } fro
 import type { FactorDataset } from '../lib/data'
 import { FACTOR_MAP } from '../lib/factors'
 import { formatRatio, formatSignedPercent } from '../lib/format'
-import { MAX_SAVED } from '../lib/saved'
+import { MAX_SAVED, signatureOf, type SaveStatus } from '../lib/saved'
 import type { PortfolioResult } from '../lib/portfolio'
+import { CompareNotice } from './CompareNotice'
 
 interface Props {
   data: FactorDataset
   savedCount: number
-  onSave: (label: string, result: PortfolioResult) => void
+  savedSignatures: string[]
+  onSave: (label: string, result: PortfolioResult) => SaveStatus
+  onGoToCompare: () => void
 }
 
 function FactorTags({ p }: { p: RankedPortfolio }) {
@@ -34,13 +37,21 @@ function FactorTags({ p }: { p: RankedPortfolio }) {
   )
 }
 
-export function BestPortfoliosTab({ data, savedCount, onSave }: Props) {
+export function BestPortfoliosTab({ data, savedCount, savedSignatures, onSave, onGoToCompare }: Props) {
   const ranked = useMemo(() => evaluateAllCombinations(data), [data])
   const [showAll, setShowAll] = useState(false)
+  const [notice, setNotice] = useState<{ status: SaveStatus; label: string } | null>(null)
   const atCap = savedCount >= MAX_SAVED
 
   const top5 = ranked.slice(0, 5)
   const rest = ranked.slice(5)
+
+  const labelFor = (p: RankedPortfolio) => `#${p.rank}: ${p.factors.map((f) => FACTOR_MAP[f].short).join('+')}`
+
+  function handleAdd(p: RankedPortfolio) {
+    const label = labelFor(p)
+    setNotice({ status: onSave(label, p), label })
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -52,6 +63,10 @@ export function BestPortfoliosTab({ data, savedCount, onSave }: Props) {
           factors each one uses.
         </p>
       </div>
+
+      {notice && (
+        <CompareNotice kind={notice.status} label={notice.label} count={savedCount} onGoToCompare={onGoToCompare} />
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 14 }}>
         {top5.map((p) => (
@@ -100,24 +115,44 @@ export function BestPortfoliosTab({ data, savedCount, onSave }: Props) {
                 <strong style={{ color: 'var(--bad)' }}>{formatSignedPercent(p.maxDrawdown).replace('+', '')}</strong>
               </div>
             </div>
-            <button
-              type="button"
-              disabled={atCap}
-              onClick={() => onSave(`#${p.rank}: ${p.factors.map((f) => FACTOR_MAP[f].short).join('+')}`, p)}
-              style={{
-                marginTop: 4,
-                padding: '8px 12px',
-                borderRadius: 8,
-                border: 'none',
-                background: atCap ? 'var(--border-strong)' : 'var(--accent)',
-                color: '#fff',
-                cursor: atCap ? 'not-allowed' : 'pointer',
-                fontSize: 12.5,
-                fontWeight: 600,
-              }}
-            >
-              {atCap ? 'Compare full' : '+ Add to Compare'}
-            </button>
+            {savedSignatures.includes(signatureOf(p)) ? (
+              <button
+                type="button"
+                onClick={onGoToCompare}
+                style={{
+                  marginTop: 4,
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: '1px solid var(--good)',
+                  background: 'transparent',
+                  color: 'var(--good)',
+                  cursor: 'pointer',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                }}
+              >
+                ✓ In Compare — view
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={atCap}
+                onClick={() => handleAdd(p)}
+                style={{
+                  marginTop: 4,
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: atCap ? 'var(--border-strong)' : 'var(--accent)',
+                  color: '#fff',
+                  cursor: atCap ? 'not-allowed' : 'pointer',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                }}
+              >
+                {atCap ? 'Compare full' : '+ Add to Compare'}
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -166,22 +201,40 @@ export function BestPortfoliosTab({ data, savedCount, onSave }: Props) {
                   <td className="tabular" style={{ padding: '6px 12px' }}>{formatRatio(p.sharpe)}</td>
                   <td className="tabular" style={{ padding: '6px 12px', color: 'var(--bad)' }}>{formatSignedPercent(p.maxDrawdown).replace('+', '')}</td>
                   <td style={{ padding: '6px 12px' }}>
-                    <button
-                      type="button"
-                      disabled={atCap}
-                      onClick={() => onSave(`#${p.rank}: ${p.factors.map((f) => FACTOR_MAP[f].short).join('+')}`, p)}
-                      style={{
-                        border: '1px solid var(--border-strong)',
-                        background: 'transparent',
-                        color: atCap ? 'var(--text-muted)' : 'var(--text-primary)',
-                        borderRadius: 6,
-                        padding: '3px 8px',
-                        cursor: atCap ? 'not-allowed' : 'pointer',
-                        fontSize: 11.5,
-                      }}
-                    >
-                      Add
-                    </button>
+                    {savedSignatures.includes(signatureOf(p)) ? (
+                      <button
+                        type="button"
+                        onClick={onGoToCompare}
+                        style={{
+                          border: '1px solid var(--good)',
+                          background: 'transparent',
+                          color: 'var(--good)',
+                          borderRadius: 6,
+                          padding: '3px 8px',
+                          cursor: 'pointer',
+                          fontSize: 11.5,
+                        }}
+                      >
+                        ✓ In
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={atCap}
+                        onClick={() => handleAdd(p)}
+                        style={{
+                          border: '1px solid var(--border-strong)',
+                          background: 'transparent',
+                          color: atCap ? 'var(--text-muted)' : 'var(--text-primary)',
+                          borderRadius: 6,
+                          padding: '3px 8px',
+                          cursor: atCap ? 'not-allowed' : 'pointer',
+                          fontSize: 11.5,
+                        }}
+                      >
+                        Add
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -6,7 +6,7 @@ import { PortfolioBuilderTab } from './components/PortfolioBuilderTab'
 import { loadFactorData, type FactorDataset } from './lib/data'
 import { PORTFOLIO_COLORS } from './lib/factors'
 import type { PortfolioResult } from './lib/portfolio'
-import { MAX_SAVED, nextId, type SavedPortfolio } from './lib/saved'
+import { MAX_SAVED, nextId, signatureOf, type SaveStatus, type SavedPortfolio } from './lib/saved'
 
 type Tab = 'library' | 'builder' | 'best' | 'compare'
 
@@ -29,17 +29,22 @@ function App() {
       .catch((e) => setError(String(e)))
   }, [])
 
-  function addSaved(label: string, result: PortfolioResult) {
-    setSaved((prev) => {
-      if (prev.length >= MAX_SAVED) return prev
-      const color = PORTFOLIO_COLORS[prev.length % PORTFOLIO_COLORS.length]
-      return [...prev, { id: nextId(), label, color, result }]
-    })
+  const savedSignatures = saved.map((s) => signatureOf(s.result))
+
+  function addSaved(label: string, result: PortfolioResult): SaveStatus {
+    const sig = signatureOf(result)
+    if (saved.some((s) => signatureOf(s.result) === sig)) return 'duplicate'
+    if (saved.length >= MAX_SAVED) return 'full'
+    const color = PORTFOLIO_COLORS[saved.length % PORTFOLIO_COLORS.length]
+    setSaved((prev) => [...prev, { id: nextId(), label, color, result }])
+    return 'added'
   }
 
   function removeSaved(id: string) {
     setSaved((prev) => prev.filter((p) => p.id !== id))
   }
+
+  const goToCompare = () => setTab('compare')
 
   return (
     <div style={{ maxWidth: 1180, margin: '0 auto', padding: '0 20px 64px' }}>
@@ -100,8 +105,24 @@ function App() {
         {error && <p style={{ color: 'var(--bad)' }}>Failed to load factor data: {error}</p>}
         {!error && !data && <p>Loading factor data…</p>}
         {data && tab === 'library' && <FactorLibraryTab data={data} />}
-        {data && tab === 'builder' && <PortfolioBuilderTab data={data} savedCount={saved.length} onSave={addSaved} />}
-        {data && tab === 'best' && <BestPortfoliosTab data={data} savedCount={saved.length} onSave={addSaved} />}
+        {data && tab === 'builder' && (
+          <PortfolioBuilderTab
+            data={data}
+            savedCount={saved.length}
+            savedSignatures={savedSignatures}
+            onSave={addSaved}
+            onGoToCompare={goToCompare}
+          />
+        )}
+        {data && tab === 'best' && (
+          <BestPortfoliosTab
+            data={data}
+            savedCount={saved.length}
+            savedSignatures={savedSignatures}
+            onSave={addSaved}
+            onGoToCompare={goToCompare}
+          />
+        )}
         {data && tab === 'compare' && (
           <CompareTab data={data} saved={saved} onRemove={removeSaved} onClear={() => setSaved([])} />
         )}
