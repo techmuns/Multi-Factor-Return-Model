@@ -23,20 +23,29 @@ const MODES: { id: WeightMode; label: string; hint: string }[] = [
   { id: 'manual', label: 'Manual', hint: 'Set each factor’s weight yourself.' },
 ]
 
+// Distribute 100 across n factors as whole numbers that sum to exactly 100
+// (e.g. 3 → [34, 33, 33]), so the default manual weights are already valid.
+function equalIntWeights(keys: FactorKey[]): Record<string, number> {
+  const n = keys.length
+  const base = Math.floor(100 / n)
+  const remainder = 100 - base * n
+  const out: Record<string, number> = {}
+  keys.forEach((k, i) => {
+    out[k] = base + (i < remainder ? 1 : 0)
+  })
+  return out
+}
+
 export function PortfolioBuilderTab({ data, savedCount, savedSignatures, onSave, onGoToCompare }: Props) {
   const [selected, setSelected] = useState<FactorKey[]>(['MKT_RF', 'SMB', 'HML'])
   const [mode, setMode] = useState<WeightMode>('optimized')
   const [manualWeights, setManualWeights] = useState<Record<string, number>>({})
   const [notice, setNotice] = useState<SaveStatus | null>(null)
 
+  // Reset manual weights to an equal split (summing to 100) whenever the factor
+  // set changes, so the manual editor always starts from a valid state.
   useEffect(() => {
-    setManualWeights((prev) => {
-      const next: Record<string, number> = {}
-      selected.forEach((k) => {
-        next[k] = prev[k] ?? Math.round(100 / selected.length)
-      })
-      return next
-    })
+    setManualWeights(equalIntWeights(selected))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected.join(',')])
 
@@ -44,15 +53,25 @@ export function PortfolioBuilderTab({ data, savedCount, savedSignatures, onSave,
     setSelected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
   }
 
+  function setManualWeight(key: FactorKey, raw: number | string) {
+    let v = typeof raw === 'string' ? parseInt(raw, 10) : raw
+    if (Number.isNaN(v)) v = 0
+    v = Math.max(-100, Math.min(100, Math.round(v)))
+    setManualWeights((prev) => ({ ...prev, [key]: v }))
+  }
+
+  const manualTotal = selected.reduce((sum, k) => sum + (manualWeights[k] ?? 0), 0)
+
   const result = useMemo(() => {
     if (selected.length === 0) return null
+    if (mode === 'manual' && manualTotal !== 100) return null
     try {
       const manual = selected.map((k) => manualWeights[k] ?? 0)
       return buildPortfolio(data, selected, mode, mode === 'manual' ? manual : undefined)
     } catch {
       return null
     }
-  }, [data, selected, mode, manualWeights])
+  }, [data, selected, mode, manualWeights, manualTotal])
 
   const label = selected.map((k) => k.replace('_RF', '')).join(' + ')
   const atCap = savedCount >= MAX_SAVED
@@ -126,24 +145,64 @@ export function PortfolioBuilderTab({ data, savedCount, savedSignatures, onSave,
       {mode === 'manual' && selected.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--surface-1)', border: '1px solid var(--border)', borderRadius: 10, padding: 14 }}>
           {selected.map((k) => (
-            <div key={k} style={{ display: 'grid', gridTemplateColumns: '90px 1fr 60px', alignItems: 'center', gap: 10 }}>
+            <div key={k} style={{ display: 'grid', gridTemplateColumns: '90px 1fr auto', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 13 }}>{k.replace('_RF', '')}</span>
               <input
                 type="range"
                 min={-100}
                 max={100}
                 value={manualWeights[k] ?? 0}
-                onChange={(e) => setManualWeights((prev) => ({ ...prev, [k]: Number(e.target.value) }))}
+                onChange={(e) => setManualWeight(k, Number(e.target.value))}
                 style={{ width: '100%' }}
               />
-              <span className="tabular" style={{ fontSize: 13, textAlign: 'right' }}>{manualWeights[k] ?? 0}%</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input
+                  type="number"
+                  min={-100}
+                  max={100}
+                  value={manualWeights[k] ?? 0}
+                  onChange={(e) => setManualWeight(k, e.target.value)}
+                  aria-label={`${k.replace('_RF', '')} weight in percent`}
+                  className="weight-input"
+                />
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>%</span>
+              </div>
             </div>
           ))}
-          <p style={{ fontSize: 11.5 }}>Weights are re-normalized so gross exposure sums to 100%.</p>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Enter weights that sum to exactly 100% (type a number or drag). Negative = short that factor.
+            </span>
+            <span
+              className="tabular"
+              style={{ fontSize: 13.5, fontWeight: 700, color: manualTotal === 100 ? 'var(--good)' : 'var(--bad)' }}
+            >
+              Total: {manualTotal}%
+            </span>
+          </div>
+
+          {manualTotal !== 100 && (
+            <div
+              role="alert"
+              style={{
+                background: 'var(--surface-2)',
+                border: '1px solid var(--bad)',
+                borderRadius: 8,
+                padding: '8px 12px',
+                fontSize: 12.5,
+                color: 'var(--bad)',
+              }}
+            >
+              {manualTotal > 100
+                ? `Invalid weights: the total is ${manualTotal}%, which exceeds 100%. Reduce the weights by ${manualTotal - 100}% so they sum to exactly 100%.`
+                : `Invalid weights: the total is ${manualTotal}%, which is below 100%. Add ${100 - manualTotal}% more so they sum to exactly 100%.`}
+            </div>
+          )}
         </div>
       )}
 
-      {!result && <p style={{ fontSize: 13 }}>Select at least one factor to see results.</p>}
+      {selected.length === 0 && <p style={{ fontSize: 13 }}>Select at least one factor to see results.</p>}
 
       {result && (
         <>

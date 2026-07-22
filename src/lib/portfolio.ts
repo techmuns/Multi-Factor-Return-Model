@@ -49,8 +49,10 @@ export function buildPortfolio(
 
   let weights: number[]
   if (weightMode === 'manual' && manualWeights) {
-    const gross = manualWeights.reduce((s, v) => s + Math.abs(v), 0) || 1
-    weights = manualWeights.map((w) => w / gross)
+    // Manual weights are percentages the UI validates to sum to 100. Convert to
+    // fractions using their signed total so the portfolio weights sum to 1.
+    const total = manualWeights.reduce((s, v) => s + v, 0)
+    weights = total !== 0 ? manualWeights.map((w) => w / total) : equalWeights(manualWeights.length)
   } else if (weightMode === 'equal') {
     weights = equalWeights(factors.length)
   } else {

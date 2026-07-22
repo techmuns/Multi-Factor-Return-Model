@@ -106,3 +106,21 @@ table {
   color: var(--bad);
   background: var(--surface-1);
 }
+
+.weight-input {
+  width: 54px;
+  padding: 4px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.weight-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
