@@ -15,7 +15,7 @@ export function FactorChips({ selected, onToggle }: Props) {
             key={f.key}
             type="button"
             onClick={() => onToggle(f.key)}
-            title={f.description}
+            title={`${f.technicalName}\n\nSorted on: ${f.sortVariable}\n\n${f.definition}`}
             style={{
               display: 'flex',
               alignItems: 'center',
